@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate cita_crypto as crypto;
-extern crate cita_types;
+pub extern crate cita_types;
 extern crate hashable;
 extern crate jsonrpc_types;
 extern crate libproto;

@@ -58,3 +58,7 @@ pub use self::factory::{Factory, VMType};
 pub use self::instructions::*;
 pub use self::return_data::{GasLeft, ReturnData};
 pub use self::schedule::Schedule;
+
+#[macro_use]
+extern crate log;
+extern crate env_logger;

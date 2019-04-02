@@ -109,10 +109,10 @@ impl Schedule {
             max_depth: 1024,
             tier_step_gas: [0, 2, 3, 5, 8, 10, 20, 0],
             exp_gas: 10,
-            exp_byte_gas: 10,
+            exp_byte_gas: 50, // cita 10, parity 50 EIP 160
             sha3_gas: 30,
             sha3_word_gas: 6,
-            sload_gas: 50,
+            sload_gas: 200, // cita 50, parity 200
             sstore_set_gas: 20_000,
             sstore_reset_gas: 5000,
             sstore_refund_gas: 15_000,
@@ -121,11 +121,10 @@ impl Schedule {
             log_data_gas: 8,
             log_topic_gas: 375,
             create_gas: 32_000,
-            call_gas: 40,
+            call_gas: 700, // cita=40, parity=700
             call_stipend: 2300,
             call_value_transfer_gas: 9000,
             call_new_account_gas: 25_000,
-            suicide_refund_gas: 24_000,
             memory_gas: 3,
             quad_coeff_div: 512,
             create_data_gas: 200,
@@ -135,11 +134,12 @@ impl Schedule {
             tx_data_zero_gas: 4,
             tx_data_non_zero_gas: 68,
             copy_gas: 3,
-            extcodesize_gas: 20,
-            extcodecopy_base_gas: 20,
-            balance_gas: 20,
-            suicide_gas: 0,
-            suicide_to_new_account_cost: 0,
+            extcodesize_gas: 700,      // cita 20, parity 700
+            extcodecopy_base_gas: 700, // cita 20, parity=700
+            balance_gas: 400,          // cita=20, parity=400
+            suicide_gas: 5000,         // cita=0, parity=5000
+            suicide_refund_gas: 24_000,
+            suicide_to_new_account_cost: 25000, // cita=0, parity=25000
             sub_gas_cap_divisor: 64,
             no_empty: false,
             kill_empty: false,

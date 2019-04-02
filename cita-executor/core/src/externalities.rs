@@ -183,6 +183,12 @@ where
             && number.low_u64() >= cmp::max(256, self.env_info.number) - 256
         {
             let index = self.env_info.number - number.low_u64() - 1;
+            info!(
+                "env.number={} number={} index={}",
+                self.env_info.number,
+                number.low_u64(),
+                index
+            );
             assert!(
                 index < self.env_info.last_hashes.len() as u64,
                 format!(
@@ -199,10 +205,9 @@ where
             );
             r
         } else {
-            trace!(
+            info!(
                 "ext: blockhash({}) -> null self.env_info.number={}\n",
-                number,
-                self.env_info.number
+                number, self.env_info.number
             );
             H256::zero()
         }
@@ -418,6 +423,14 @@ where
 
         let address = self.origin_info.address;
         let balance = self.balance(&address)?;
+        // wpf suicide test
+        if &address == refund_address {
+            self.state.sub_balance(&address, &balance)?;
+        } else {
+            self.state
+                .transfer_balance(&address, refund_address, &balance)?;
+        }
+
         self.tracer.trace_suicide(address, balance, *refund_address);
         self.substate.suicides.insert(address);
         Ok(())

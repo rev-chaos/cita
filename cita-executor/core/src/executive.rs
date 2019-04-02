@@ -297,13 +297,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
     {
         let sender = *t.sender();
         let nonce = self.state.nonce(&sender)?;
-
         self.state.inc_nonce(&sender)?;
-
-        trace!(
-            "call contract permission should be check: {}",
-            (*conf).check_options.call_permission
-        );
 
         check_permission(
             &conf.group_accounts,
@@ -313,12 +307,20 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         )?;
 
         let schedule = Schedule::new_v1();
-
-        let base_gas_required = match t.action {
+        let mut base_gas_required = match t.action {
             Action::Create => schedule.tx_create_gas,
             Action::GoCreate => schedule.tx_create_gas,
             _ => schedule.tx_gas,
         };
+
+        // wpf test
+        for i in &t.data {
+            if i == &0u8 {
+                base_gas_required += schedule.tx_data_zero_gas;
+            } else {
+                base_gas_required += schedule.tx_data_non_zero_gas;
+            }
+        }
 
         if sender != Address::zero() && t.gas < U256::from(base_gas_required) {
             return Err(ExecutionError::NotEnoughBaseGas {
@@ -337,16 +339,6 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
             }
         }
 
-        /*trace!("quota should be checked: {}", options.check_quota);
-        if options.check_quota {
-            check_quota(
-                self.info.gas_used,
-                self.info.gas_limit,
-                self.info.account_gas_limit,
-                t,
-            )?;
-        }*/
-
         if t.action == Action::AbiStore && !self.transact_set_abi(&t.data) {
             return Err(ExecutionError::TransactionMalformed(
                 "Account doesn't exist".to_owned(),
@@ -357,11 +349,14 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         let balance = self.state.balance(&sender)?;
         let gas_cost = t.gas.full_mul(t.gas_price());
         let total_cost = U512::from(t.value) + gas_cost;
+        // debug!("total_cost: {}", total_cost);
 
         // avoid unaffordable transactions
+        // debug!("is_payment_required: {}", self.payment_required());
         if self.payment_required() {
             let balance512 = U512::from(balance);
             if balance512 < total_cost {
+                // debug!()
                 return Err(ExecutionError::NotEnoughCash {
                     required: total_cost,
                     got: balance512,
@@ -417,6 +412,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
             }
             Action::Create => {
                 let new_address = contract_address(&sender, &nonce);
+                debug!("state.new_address {}", new_address);
                 let params = ActionParams {
                     code_address: new_address,
                     code_hash: t.data.crypt_hash(),
@@ -518,13 +514,20 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         T: Tracer,
         V: VMTracer,
     {
+        debug!("---> LOCAL_STACK_SIZE: {:?}", LOCAL_STACK_SIZE);
         let depth_threshold = LOCAL_STACK_SIZE.with(|sz| sz.get() / STACK_SIZE_PER_DEPTH);
+        debug!(
+            "self.depth:{} , depth in exec_vm: {}",
+            self.depth, depth_threshold
+        );
         let static_call = params.call_type == CallType::StaticCall;
+        // debug!("is_static_call: {}", static_call);
 
         // Ordinary execution - keep VM in same thread
         if (self.depth + 1) % depth_threshold != 0 {
             let vm_factory = self.vm_factory;
             let economical_model = self.economical_model;
+            debug!("economical model in vm: {:?}", economical_model);
             let mut ext = self.as_externalities(
                 OriginInfo::from(params),
                 unconfirmed_substate,
@@ -543,6 +546,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         // Start in new thread to reset stack
         // TODO [todr] No thread builder yet, so we need to reset once for a while
         // https://github.com/aturon/crossbeam/issues/16
+
         crossbeam::scope(|scope| {
             let vm_factory = self.vm_factory;
             let economical_model = self.economical_model;
@@ -582,6 +586,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         T: Tracer,
         V: VMTracer,
     {
+        // debug!("params call type: {:?}", params.call_type);
         if (params.call_type == CallType::StaticCall
             || (params.call_type == CallType::Call && self.static_flag))
             && params.value.value() > 0.into()
@@ -591,11 +596,23 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 
         // backup used in case of running out of gas
         self.state.checkpoint();
+        debug!("state.checkpoint");
 
+        // Rename it!!
         let static_call = params.call_type == CallType::StaticCall;
+        // debug!("is_static_call in call: {}", static_call);
 
         // at first, transfer value to destination
         // TODO Keep it for compatibility. Remove it later.
+        debug!(
+            "payment_required in call: {}, value: {:?}, sender: {:?}, to: {:?}, gas: {:?}, gas_price: {:?}",
+            self.payment_required(),
+            params.value,
+            params.sender,
+            params.address,
+            params.gas,
+            params.gas_price,
+        );
         if let (true, ActionValue::Transfer(val)) = (self.payment_required(), &params.value) {
             self.state
                 .transfer_balance(&params.sender, &params.address, &val)?
@@ -839,9 +856,6 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
                 Err(ref e) => tracer.trace_failed_call(trace_info, traces, e.into()),
             };
 
-            trace!(target: "executive", "substate={:?}; unconfirmed_substate={:?}\n",
-                   substate, unconfirmed_substate);
-
             self.enact_result(&res, substate, unconfirmed_substate);
             trace!(target: "executive", "enacted: substate={:?}\n", substate);
             res
@@ -963,7 +977,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         if self.state.exists_and_has_code_or_nonce(&params.address)? {
             return Err(evm::Error::OutOfGas);
         }
-        trace!(
+        debug!(
             "Executive::create(
                 params.code_address={:?}, params.code_hash={:?},
                 params.address={:?}, params.sender={:?}, params.origin={:?}
@@ -982,6 +996,10 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
             self.info,
             self.static_flag
         );
+        debug!(
+            "params.call_type: {:?}, static_flag: {}",
+            params.call_type, self.static_flag
+        );
         if params.call_type == CallType::StaticCall || self.static_flag {
             let trace_info = tracer.prepare_trace_create(&params);
             tracer.trace_failed_create(
@@ -994,6 +1012,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 
         // backup used in case of running out of gas
         self.state.checkpoint();
+        debug!("state.checkpoint");
 
         // part of substate that may be reverted
         let mut unconfirmed_substate = Substate::new();
@@ -1001,11 +1020,13 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         // create contract and transfer value to it if necessary
         /*let schedule = self.engine.schedule(self.info);
         let nonce_offset = if schedule.no_empty {1} else {0}.into();*/
-        let nonce_offset = U256::from(0);
+        let nonce_offset = U256::from(1);
         let prev_bal = self.state.balance(&params.address)?;
+
         // TODO Keep it for compatibility. Remove it later.
         if let (true, &ActionValue::Transfer(val)) = (self.payment_required(), &params.value) {
             self.state.sub_balance(&params.sender, &val)?;
+            debug!("state.sub_balance a= {:?}, decr= {}", &params.sender, &val);
             self.state
                 .new_contract(&params.address, val + prev_bal, nonce_offset);
         } else {
@@ -1024,6 +1045,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
                                        ; both place `Some(...)` `code` in `params`; qed",
         ));
 
+        debug!("===================== execute in vm start =====================");
         let res = {
             self.exec_vm(
                 &params,
@@ -1033,6 +1055,8 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
                 &mut subvmtracer,
             )
         };
+        debug!("executed result in executive create: {:?}", res);
+        debug!("======================= execute in vm end =====================");
 
         vm_tracer.done_subtrace(subvmtracer);
 
@@ -1065,9 +1089,6 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         chain_owner: Address,
         fee_back_platform: bool,
     ) -> ExecutionResult {
-        /*
-        let schedule = self.engine.schedule(self.info);
-         */
         let schedule = Schedule::new_v1();
         // refunds from SSTORE nonzero -> zero
         let sstore_refunds = U256::from(schedule.sstore_refund_gas) * substate.sstore_clears_count;
@@ -1104,21 +1125,9 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
         );
 
         let sender = t.sender();
-        trace!(
-            "exec::finalize: Refunding refund_value={}, sender={}\n",
-            refund_value,
-            sender
-        );
-
         if let EconomicalModel::Charge = self.economical_model {
             self.state.add_balance(&sender, &refund_value)?;
         }
-
-        trace!(
-            "exec::finalize: Compensating author: fees_value={}, author={}\n",
-            fees_value,
-            &self.info.author
-        );
 
         if let EconomicalModel::Charge = self.economical_model {
             if fee_back_platform {
@@ -1208,10 +1217,12 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
                 apply_state: false, ..
             }) => {
                 self.state.revert_to_checkpoint();
+                debug!("state.revert_to_checkpoint");
             }
             Ok(_) | Err(evm::Error::Internal(_)) => {
                 self.state.discard_checkpoint();
                 substate.accrue(un_substate);
+                debug!("state.discard_checkpoint");
             }
         }
     }

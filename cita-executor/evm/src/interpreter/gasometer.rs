@@ -104,7 +104,7 @@ impl<Gas: CostType> Gasometer<Gas> {
     /// Determine how much gas is used by the given instruction, given the machine's state.
     ///
     /// We guarantee that the final element of the returned tuple (`provided`) will be `Some`
-    /// iff the `instruction` is one of `CREATE`, or any of the `CALL` variants. In this case,
+    /// if the `instruction` is one of `CREATE`, or any of the `CALL` variants. In this case,
     /// it will be the amount of gas that the current context provides to the child context.
     pub fn requirements(
         &mut self,

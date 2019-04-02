@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>", "Cryptape Technologies <contact@cryptape.com>"]
 
 [dependencies]
+env_logger = "0.6.1"
+log = "0.4.0"
 cita-types = { git = "https://github.com/cryptape/cita-common.git", branch = "develop" }
 hashable = { git = "https://github.com/cryptape/cita-common.git", branch = "develop" }
 lazy_static = "0.2"

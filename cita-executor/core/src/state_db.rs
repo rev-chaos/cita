@@ -257,7 +257,6 @@ impl StateDB {
     ) -> bool {
         let mut parent = match *parent_hash {
             None => {
-                trace!("Cache lookup skipped for {:?}: no parent hash", addr);
                 return false;
             }
             Some(ref parent) => parent,
@@ -278,17 +277,9 @@ impl StateDB {
                 parent = &m.parent;
             }
             if m.accounts.contains(addr) {
-                trace!(
-                    "Cache lookup skipped for {:?}: modified in a later block",
-                    addr
-                );
                 return false;
             }
         }
-        trace!(
-            "Cache lookup skipped for {:?}: parent hash is unknown",
-            addr
-        );
         false
     }
 }

@@ -129,6 +129,7 @@ impl<Cost: CostType> evm::Evm for Interpreter<Cost> {
             reader.position += 1;
 
             let info = &infos[instruction as usize];
+            debug!("[OP] {:?} gas={:?}", info.name, gasometer.current_gas);
             self.verify_instruction(ext, instruction, info, &stack)?;
 
             // Calculate gas cost
@@ -145,6 +146,7 @@ impl<Cost: CostType> evm::Evm for Interpreter<Cost> {
             self.mem.expand(requirements.memory_required_size);
             gasometer.current_mem_gas = requirements.memory_total_gas;
             gasometer.current_gas = gasometer.current_gas - requirements.gas_cost;
+            debug!("[Gas] - {:?}", requirements.gas_cost);
 
             evm_debug!({
                 informant.before_instruction(

@@ -218,7 +218,7 @@ impl Transaction {
         let version = plain_transaction.get_version();
         Ok(Transaction {
             nonce: plain_transaction.get_nonce().to_owned(),
-            gas_price: U256::default(),
+            gas_price: U256::from(1),
             gas: U256::from(plain_transaction.get_quota()),
             action: {
                 if version == 0 {

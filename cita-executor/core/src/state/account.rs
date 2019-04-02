@@ -30,6 +30,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use tiny_keccak;
 use types::basic_account::BasicAccount;
 use util::*;
 
@@ -158,6 +159,7 @@ impl Account {
 
     /// Create a new account.
     pub fn new_basic(balance: U256, nonce: U256) -> Account {
+        debug!("state.new_contract, balance {}, nonce {}", balance, nonce);
         Account {
             balance,
             nonce,
@@ -561,6 +563,7 @@ impl Account {
 
     /// Increment the nonce of the account by one.
     pub fn inc_nonce(&mut self) {
+        debug!("state.inc_nonce");
         self.nonce = self.nonce + U256::from(1u8);
     }
 
@@ -585,9 +588,9 @@ impl Account {
             // cast key and value to trait type,
             // so we can call overloaded `to_bytes` method
             if v.is_zero() {
-                t.remove(&k)?
+                t.remove(&tiny_keccak::keccak256(&k))?
             } else {
-                t.insert(&k, &encode(&U256::from(&*v)))?
+                t.insert(&tiny_keccak::keccak256(&k), &encode(&U256::from(&*v)))?
             };
 
             self.storage_cache.borrow_mut().insert(k, v);
@@ -629,12 +632,12 @@ impl Account {
 
     /// Export to RLP.
     pub fn rlp(&self) -> Bytes {
-        let mut stream = RlpStream::new_list(5);
+        let mut stream = RlpStream::new_list(4);
         stream.append(&self.nonce);
         stream.append(&self.balance);
         stream.append(&self.storage_root);
         stream.append(&self.code_hash);
-        stream.append(&self.abi_hash);
+        // stream.append(&self.abi_hash);
         stream.out()
     }
 

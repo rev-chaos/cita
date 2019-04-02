@@ -79,7 +79,7 @@ fn test_get_log_topics() {
     assert_eq!(get_log_topics(LOG4), 4);
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum GasPriceTier {
     /// 0 Zero
     Zero,
@@ -122,7 +122,7 @@ pub fn get_tier_idx(tier: GasPriceTier) -> usize {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct InstructionInfo {
     pub name: &'static str,
     pub additional: usize,

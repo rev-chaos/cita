@@ -39,6 +39,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
+use tiny_keccak;
 use trace::FlatTrace;
 use types::transaction::SignedTransaction;
 use util::*;
@@ -272,7 +273,6 @@ const SEC_TRIE_DB_UNWRAP_STR: &str =
 
 impl<B: Backend> State<B> {
     /// Creates new state with empty state root
-    #[cfg(test)]
     pub fn new(mut db: B, account_start_nonce: U256, factories: Factories) -> State<B> {
         let mut root = H256::new();
         {
@@ -425,6 +425,7 @@ impl<B: Backend> State<B> {
 
     /// Remove an existing account.
     pub fn kill_account(&mut self, account: &Address) {
+        debug!("state.kill_contract contract={:?}", account);
         self.insert_cache(account, AccountEntry::new_dirty(None));
     }
 
@@ -635,7 +636,8 @@ impl<B: Backend> State<B> {
 
     /// Add `incr` to the balance of account `a`.
     pub fn add_balance(&mut self, a: &Address, incr: &U256) -> trie::Result<()> {
-        trace!(target: "state", "add_balance({}, {}): {}", a, incr, self.balance(a)?);
+        // trace!(target: "state", "add_balance({}, {}): {}", a, incr, self.balance(a)?);
+        debug!("state.add_balance a={}, incr={}", &a, &incr);
         let is_value_transfer = !incr.is_zero();
         if is_value_transfer {
             self.require(a, false, false)?.add_balance(incr);
@@ -647,7 +649,8 @@ impl<B: Backend> State<B> {
 
     /// Subtract `decr` from the balance of account `a`.
     pub fn sub_balance(&mut self, a: &Address, decr: &U256) -> trie::Result<()> {
-        trace!(target: "state", "sub_balance({}, {}): {}", a, decr, self.balance(a)?);
+        // trace!(target: "state", "sub_balance({}, {}): {}", a, decr, self.balance(a)?);
+        debug!("state.sub_balance a= {:?}, decr= {:?}", a, decr);
         if !decr.is_zero() || !self.exists(a)? {
             self.require(a, false, false)?.sub_balance(decr);
         }
@@ -663,6 +666,8 @@ impl<B: Backend> State<B> {
         by: &U256,
     ) -> trie::Result<()> {
         self.sub_balance(from, by)?;
+        debug!("transfer balance process:");
+        debug!("state.sub_balance a= {:?}, decr= {}", from, by);
         self.add_balance(to, by)?;
         Ok(())
     }
@@ -674,6 +679,10 @@ impl<B: Backend> State<B> {
 
     /// Mutate storage of account `a` so that it is `value` for `key`.
     pub fn set_storage(&mut self, a: &Address, key: H256, value: H256) -> trie::Result<()> {
+        debug!(
+            "state.set_storage address={:?} key={:?} value={:?}",
+            a, key, value
+        );
         if self.storage_at(a, &key)? != value {
             self.require(a, false, false)?.set_storage(key, value)
         }
@@ -748,7 +757,7 @@ impl<B: Backend> State<B> {
     ) -> ApplyResult {
         let options = TransactOptions {
             tracing,
-            vm_tracing: false,
+            vm_tracing: true,
         };
         let vm_factory = self.factories.vm.clone();
         let native_factory = self.factories.native.clone();
@@ -759,7 +768,7 @@ impl<B: Backend> State<B> {
             engine,
             &vm_factory,
             &native_factory,
-            false,
+            false, // static_flag 设置为 false
             conf.economical_model,
         )
         .transact(t, options, conf)
@@ -907,17 +916,23 @@ impl<B: Backend> State<B> {
                 .trie
                 .get_from_existing(self.db.as_hashdb_mut(), &mut self.root)
                 .map_err(|err| *err)?;
+            // debug!("trie's root before insert: {:?}", trie.root());s
             for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
                 a.state = AccountState::Committed;
                 match a.account {
                     Some(ref mut account) => {
-                        trie.insert(address, &account.rlp()).map_err(|err| *err)?;
+                        debug!("============> commit key={:?}", address);
+                        trie.insert(&tiny_keccak::keccak256(&address), &account.rlp())
+                            .map_err(|err| *err)?;
                     }
                     None => {
-                        trie.remove(address).map_err(|err| *err)?;
+                        debug!("============> commit remove {:?}", address);
+                        trie.remove(&tiny_keccak::keccak256(&address))
+                            .map_err(|err| *err)?;
                     }
                 }
             }
+            // debug!("trie's root after insert: {:?}", trie.root());
         }
 
         Ok(())
